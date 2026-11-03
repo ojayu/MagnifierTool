@@ -1,13 +1,13 @@
 # encoding: utf-8
 # Author: Yutaka Ozawa (mojipokke)
-# Date: 2026-11-03 12:18:37 JST
-# Version: v3.8.1
+# Date: 2026-11-03 13:35:51 JST
+# Version: v3.8.2
 #MenuTitle: Magnifier Tool
 
 from __future__ import division, print_function, unicode_literals
 
 __doc__ = """
-Magnifier Tool v3.8.1
+Magnifier Tool v3.8.2
 
 概要:
 カーソル周辺を拡大表示するGlyphs用ツールプラグインです。
@@ -84,8 +84,11 @@ def _isJapanese():
 
 
 class MagnifierView(NSView):
-    def init(self):
-        self = super(MagnifierView, self).init()
+    # NSView の指定イニシャライザは initWithFrame: のため、init ではなくこちらを
+    # オーバーライドする（macOS 26 Tahoe で init 経由だと内部の
+    # _trackingAreaHelper が確保されず addSubview: で例外になるため）
+    def initWithFrame_(self, frame):
+        self = objc.super(MagnifierView, self).initWithFrame_(frame)
         if self:
             self.mousePosition = (0, 0)
             self.zoomLevel = 4.0
@@ -630,14 +633,12 @@ class MagnifierTool(SelectTool):
         self._window.bind("resize", self.windowDidResize)
         self._window.bind("move", self.windowDidMove)
 
-        self._magnifierView = MagnifierView.alloc().init()
+        content_bounds = self._window.getNSWindow().contentView().bounds()
+        self._magnifierView = MagnifierView.alloc().initWithFrame_(content_bounds)
         self._magnifierView.setAutoresizingMask_(
             NSViewWidthSizable | NSViewHeightSizable
         )
         self._window.getNSWindow().contentView().addSubview_(self._magnifierView)
-
-        content_bounds = self._window.getNSWindow().contentView().bounds()
-        self._magnifierView.setFrame_(content_bounds)
 
         def_zoom = Glyphs.defaults.get(self.pref_zoom, 4.0)
         def_fill = Glyphs.defaults.get(self.pref_fill, True)
@@ -770,7 +771,7 @@ class MagnifierTool(SelectTool):
             (10, -30, 70, 24), _L("Reset", "リセット"), callback=self.resetCallback
         )
         self._window.versionText = TextBox(
-            (-60, -25, -10, 15), "v3.8.1", sizeStyle='mini', alignment='right'
+            (-60, -25, -10, 15), "v3.8.2", sizeStyle='mini', alignment='right'
         )
 
         doc = Glyphs.currentDocument

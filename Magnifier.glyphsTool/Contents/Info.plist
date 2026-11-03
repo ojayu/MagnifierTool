@@ -13,9 +13,9 @@
 	<key>CFBundleName</key>
 	<string>Magnifier Tool</string>
 	<key>CFBundleShortVersionString</key>
-	<string>3.8.1</string>
+	<string>3.8.2</string>
 	<key>CFBundleVersion</key>
-	<string>3801</string>
+	<string>3802</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright, Yutaka Ozawa (mojipokke)</string>
 	<key>NSPrincipalClass</key>
