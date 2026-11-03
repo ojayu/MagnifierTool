@@ -1,13 +1,13 @@
 # encoding: utf-8
 # Author: Yutaka Ozawa (mojipokke)
-# Date: 2026-11-03 13:48:21 JST
-# Version: v3.9.0
+# Date: 2026-11-03 13:55:34 JST
+# Version: v3.10.0
 #MenuTitle: Magnifier Tool
 
 from __future__ import division, print_function, unicode_literals
 
 __doc__ = """
-Magnifier Tool v3.9.0
+Magnifier Tool v3.10.0
 
 概要:
 カーソル周辺を拡大表示するGlyphs用ツールプラグインです。
@@ -27,6 +27,8 @@ NSTimerを用いた60fpsのリアルタイム同期と、永続ウィンドウ�
 8. UIのテキストは Glyphs の言語設定（日本語／英語）に応じて自動で切り替わります。
 9. コンポーネントは、パスとは別の色（塗り＋破線の輪郭）で表示されます。
    カラー・塗り・線は「コンポーネント」の行で個別に設定できます。
+10. 編集タブに複数のグリフ（複数行）が並んでいる場合、それらもすべて
+    編集画面と同じ並びで拡大表示されます（ポイント等はアクティブなグリフのみ）。
 
 Overview:
 A tool plugin for Glyphs that shows a magnified view of the area around the cursor.
@@ -55,6 +57,9 @@ Usage:
    setting (Japanese / English).
 9. Components are drawn in a separate color from paths (fill + dashed outline).
    Their color, fill and stroke can be set in the "Component" row.
+10. When the Edit tab shows several glyphs (on one or more lines), all of them
+    are magnified in the same arrangement as in the Edit tab
+    (nodes, anchors and metrics are shown for the active glyph only).
 """
 
 import os
@@ -113,6 +118,9 @@ class MagnifierView(NSView):
             self.compFillColor = NSColor.colorWithCalibratedRed_green_blue_alpha_(
                 0.1, 0.55, 0.55, 0.35
             )
+            # 編集タブ内の他のグリフ: [(layer, dx, dy), ...]
+            # dx, dy はアクティブレイヤー原点からのオフセット（フォント単位）
+            self.otherLayers = []
         return self
 
     @objc.python_method
@@ -120,6 +128,62 @@ class MagnifierView(NSView):
         self.compShowFill = compShowFill
         self.compShowStroke = compShowStroke
         self.compFillColor = compFillColor
+
+    @objc.python_method
+    def updateOtherLayers(self, otherLayers):
+        self.otherLayers = otherLayers or []
+
+    @objc.python_method
+    def drawOtherLayers_(self, context, minX, maxX, minY, maxY):
+        """
+        編集タブに並んでいる他のグリフを、編集画面と同じ位置関係で描画する。
+        （ポイント・アンカー・メトリクスはアクティブなグリフのみ表示）
+        """
+        if not self.otherLayers:
+            return
+        fg_c = self.getAdaptiveColor_(self.fillColor)
+        margin = 2000
+        for (ol, dx, dy) in self.otherLayers:
+            try:
+                w = ol.width or 0
+                # 表示範囲外のグリフは描画しない
+                if dx + w + margin < minX or dx - margin > maxX:
+                    continue
+                if dy + margin < minY or dy - margin > maxY:
+                    continue
+
+                context.saveGraphicsState()
+                t = NSAffineTransform.transform()
+                t.translateXBy_yBy_(dx, dy)
+                t.concat()
+
+                self.drawComponents_(
+                    ol, self.compFillColor,
+                    self.compShowFill, self.compShowStroke, True
+                )
+
+                if self.showFill and ol.bezierPath:
+                    if fg_c:
+                        fg_c.set()
+                    ol.bezierPath.fill()
+
+                if self.showStroke and ol.paths:
+                    if fg_c:
+                        fg_c.colorWithAlphaComponent_(1.0).set()
+                    else:
+                        NSColor.textColor().set()
+                    for path in ol.paths:
+                        bp = path.bezierPath
+                        if bp:
+                            bp.setLineWidth_(1.0 / self.zoomLevel)
+                            bp.stroke()
+
+                context.restoreGraphicsState()
+            except Exception:
+                try:
+                    context.restoreGraphicsState()
+                except Exception:
+                    pass
 
     @objc.python_method
     def drawComponents_(self, layer, color, showFill, showStroke, dashed):
@@ -381,20 +445,25 @@ class MagnifierView(NSView):
                         line.stroke()
                         context.restoreGraphicsState()
 
-                # ------ 5. コンポーネント ------
+                # ------ 5. 編集タブ内の他のグリフ ------
+                self.drawOtherLayers_(
+                    context, minX, maxX, minY_screen, maxY_screen
+                )
+
+                # ------ 6. コンポーネント ------
                 self.drawComponents_(
                     self.activeLayer, self.compFillColor,
                     self.compShowFill, self.compShowStroke, True
                 )
 
-                # ------ 6. メインパス (塗り) ------
+                # ------ 7. メインパス (塗り) ------
                 if self.showFill and self.activeLayer.bezierPath:
                     fg_c = self.getAdaptiveColor_(self.fillColor)
                     if fg_c:
                         fg_c.set()
                     self.activeLayer.bezierPath.fill()
 
-                # ------ 7. メインパス (線) ------
+                # ------ 8. メインパス (線) ------
                 if self.showStroke and self.activeLayer.paths:
                     fg_c = self.getAdaptiveColor_(self.fillColor)
                     if fg_c:
@@ -408,7 +477,7 @@ class MagnifierView(NSView):
                             bp.setLineWidth_(1.0 / self.zoomLevel)
                             bp.stroke()
 
-                # ------ 8. アンカー ------
+                # ------ 9. アンカー ------
                 show_anchors = Glyphs.defaults.get("showAnchors", False)
                 if show_anchors:
                     anchor_color = NSColor.colorWithCalibratedRed_green_blue_alpha_(
@@ -431,7 +500,7 @@ class MagnifierView(NSView):
                         p.fill()
                         context.restoreGraphicsState()
 
-                # ------ 9. ノード (ポイント) ------
+                # ------ 10. ノード (ポイント) ------
                 if self.showNodes and self.activeLayer.paths:
                     base_on = [2.0, 2.8, 4.0]
                     base_off = [1.2, 1.8, 2.5]
@@ -866,7 +935,7 @@ class MagnifierTool(SelectTool):
             (10, -30, 70, 24), _L("Reset", "リセット"), callback=self.resetCallback
         )
         self._window.versionText = TextBox(
-            (-60, -25, -10, 15), "v3.9.0", sizeStyle='mini', alignment='right'
+            (-60, -25, -10, 15), "v3.10.0", sizeStyle='mini', alignment='right'
         )
 
         doc = Glyphs.currentDocument
@@ -1014,6 +1083,107 @@ class MagnifierTool(SelectTool):
             pass
 
     @objc.python_method
+    def _tabLayers(self, evc):
+        """編集タブに表示されているレイヤーの一覧（改行等も含む）"""
+        layers = None
+        try:
+            layers = list(evc.composedLayers)
+        except Exception:
+            layers = None
+        if not layers:
+            try:
+                layers = list(evc.graphicView().layoutManager().cachedLayers())
+            except Exception:
+                layers = []
+        return layers
+
+    @objc.python_method
+    def _positionScaleFactor(self, layers, positions, gv):
+        """
+        cachedPositionAtIndex_ の値が表示倍率込みかどうかを、
+        同じ行で隣り合うグリフの間隔とグリフ幅の比から判定する。
+        """
+        try:
+            scale = float(gv.scale())
+        except Exception:
+            return 1.0
+        if abs(scale - 1.0) < 0.05:
+            return 1.0
+        for i in range(len(layers) - 1):
+            try:
+                w = float(getattr(layers[i], 'width', 0) or 0)
+                if w < 50:
+                    continue
+                if abs(positions[i + 1].y - positions[i].y) > 0.5:
+                    continue
+                dx = positions[i + 1].x - positions[i].x
+                if dx <= 0:
+                    continue
+                ratio = dx / w
+                return scale if abs(ratio - scale) < abs(ratio - 1.0) else 1.0
+            except Exception:
+                continue
+        return 1.0
+
+    @objc.python_method
+    def collectOtherLayers(self, evc, activeLayer, force=False):
+        """
+        編集タブ内のアクティブ以外のグリフと、アクティブなグリフ原点からの
+        オフセットを返す。重いのでタブ内容・アクティブ位置・倍率が変わった
+        ときだけ再計算する。
+        """
+        gv = evc.graphicView()
+        activeIdx = None
+        try:
+            activeIdx = int(gv.activeIndex())
+        except Exception:
+            activeIdx = None
+        try:
+            scale = float(gv.scale())
+        except Exception:
+            scale = 1.0
+
+        key = (evc, activeLayer, activeIdx, scale)
+        if not force and getattr(self, '_otherLayersKey', None) == key:
+            return self._otherLayersCache
+
+        result = []
+        try:
+            layers = self._tabLayers(evc)
+            if len(layers) > 1:
+                if activeIdx is None or activeIdx >= len(layers) or \
+                        layers[activeIdx] != activeLayer:
+                    activeIdx = None
+                    for i, l in enumerate(layers):
+                        if l == activeLayer:
+                            activeIdx = i
+                            break
+                if activeIdx is not None:
+                    positions = [
+                        gv.cachedPositionAtIndex_(i) for i in range(len(layers))
+                    ]
+                    factor = self._positionScaleFactor(layers, positions, gv)
+                    ax = positions[activeIdx].x
+                    ay = positions[activeIdx].y
+                    for i, l in enumerate(layers):
+                        if i == activeIdx:
+                            continue
+                        # 改行などの制御用レイヤー（パスもコンポーネントも無い）は除外
+                        if not getattr(l, 'paths', None) and \
+                                not getattr(l, 'components', None):
+                            continue
+                        pos = positions[i]
+                        result.append(
+                            (l, (pos.x - ax) / factor, (pos.y - ay) / factor)
+                        )
+        except Exception:
+            result = []
+
+        self._otherLayersKey = key
+        self._otherLayersCache = result
+        return result
+
+    @objc.python_method
     def updateMagnifierView(self, force=False):
         if not self._window or not hasattr(self, '_magnifierView'):
             return
@@ -1107,6 +1277,8 @@ class MagnifierTool(SelectTool):
             show_guides = Glyphs.defaults.get("showGuidelines", False)
             show_anchors = Glyphs.defaults.get("showAnchors", False)
 
+            otherLayers = self.collectOtherLayers(evc, layer, force=force)
+
             current_state = (
                 new_pos, layer, zoom, showFill, showNodes, showGrid, showStroke,
                 fillColor.description() if fillColor else None,
@@ -1115,7 +1287,8 @@ class MagnifierTool(SelectTool):
                 bgFillColor.description() if bgFillColor else None,
                 nodeSizeIndex,
                 compShowFill, compShowStroke,
-                compFillColor.description() if compFillColor else None
+                compFillColor.description() if compFillColor else None,
+                len(otherLayers)
             )
 
             if not force and hasattr(self, '_last_drawn_state') and \
@@ -1128,6 +1301,7 @@ class MagnifierTool(SelectTool):
             self._magnifierView.updateComponentInfo(
                 compShowFill, compShowStroke, compFillColor
             )
+            self._magnifierView.updateOtherLayers(otherLayers)
             self._magnifierView.updateInfo(
                 new_pos, layer, zoom, showFill, showNodes, showGrid,
                 showStroke, fillColor, bgShowFill, bgShowStroke, bgFillColor,
