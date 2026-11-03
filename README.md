@@ -13,6 +13,7 @@ A tool plugin for [Glyphs](https://glyphsapp.com/) that shows a magnified view o
 - Real-time 60 fps magnified view of the area around the cursor in a separate window
 - The window stays open when you switch to other tools (Pen tool, etc.)
 - Separate color / fill / stroke settings for the foreground and background layers
+- Components are shown in their own color (fill + dashed outline), with separate color / fill / stroke settings
 - Metrics display that adapts to CJK and Latin glyphs
 - Node size (S / M / L) and grid display toggles
 - "Link Zoom" to follow the Edit tab zoom level
@@ -50,6 +51,7 @@ Yutaka Ozawa (mojipokke)
 - 60fps のリアルタイム同期で、カーソル周辺を別ウィンドウに拡大表示
 - 他のツール（ペンツール等）に切り替えてもウィンドウを保持
 - 前面・背景レイヤーそれぞれに独立したカラー／塗り／線の設定
+- コンポーネントをパスとは別の色（塗り＋破線の輪郭）で表示し、カラー／塗り／線を個別に設定可能
 - 和文・欧文に連動するメトリクス表示
 - ポイントサイズ（小・中・大）、グリッド表示の切り替え
 - 編集タブのズームに連動する「倍率連動」

@@ -1,13 +1,13 @@
 # encoding: utf-8
 # Author: Yutaka Ozawa (mojipokke)
-# Date: 2026-11-03 13:35:51 JST
-# Version: v3.8.2
+# Date: 2026-11-03 13:48:21 JST
+# Version: v3.9.0
 #MenuTitle: Magnifier Tool
 
 from __future__ import division, print_function, unicode_literals
 
 __doc__ = """
-Magnifier Tool v3.8.2
+Magnifier Tool v3.9.0
 
 概要:
 カーソル周辺を拡大表示するGlyphs用ツールプラグインです。
@@ -25,6 +25,8 @@ NSTimerを用いた60fpsのリアルタイム同期と、永続ウィンドウ�
 6. 編集タブの表示オプション（背景、メトリクス、ガイド、アンカー等）のON/OFFが拡大画面にも反映されます。
 7. 編集タブをすべて閉じると安全のために自動で待機状態になり、再びグリフを開くと元の位置に復帰します。
 8. UIのテキストは Glyphs の言語設定（日本語／英語）に応じて自動で切り替わります。
+9. コンポーネントは、パスとは別の色（塗り＋破線の輪郭）で表示されます。
+   カラー・塗り・線は「コンポーネント」の行で個別に設定できます。
 
 Overview:
 A tool plugin for Glyphs that shows a magnified view of the area around the cursor.
@@ -51,6 +53,8 @@ Usage:
    and returns to its previous position when you open a glyph again.
 8. The UI text switches automatically according to the Glyphs language
    setting (Japanese / English).
+9. Components are drawn in a separate color from paths (fill + dashed outline).
+   Their color, fill and stroke can be set in the "Component" row.
 """
 
 import os
@@ -104,7 +108,51 @@ class MagnifierView(NSView):
                 0.8, 0.4, 0.4, 0.4
             )
             self.nodeSizeIndex = 1
+            self.compShowFill = True
+            self.compShowStroke = True
+            self.compFillColor = NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                0.1, 0.55, 0.55, 0.35
+            )
         return self
+
+    @objc.python_method
+    def updateComponentInfo(self, compShowFill, compShowStroke, compFillColor):
+        self.compShowFill = compShowFill
+        self.compShowStroke = compShowStroke
+        self.compFillColor = compFillColor
+
+    @objc.python_method
+    def drawComponents_(self, layer, color, showFill, showStroke, dashed):
+        """
+        レイヤー内のコンポーネントを描画する。
+        コンポーネントと分かるよう、パスとは別色で塗り、線は破線で描く。
+        """
+        components = getattr(layer, 'components', None)
+        if not components:
+            return
+        c = self.getAdaptiveColor_(color)
+        for comp in components:
+            try:
+                cbp = comp.bezierPath
+            except Exception:
+                cbp = None
+            if not cbp:
+                continue
+            bp = cbp.copy()  # Glyphs 側のパスに線幅などを書き込まないようコピーする
+            if showFill:
+                if c:
+                    c.set()
+                bp.fill()
+            if showStroke:
+                if c:
+                    c.colorWithAlphaComponent_(1.0).set()
+                else:
+                    NSColor.textColor().set()
+                bp.setLineWidth_(1.0 / self.zoomLevel)
+                if dashed:
+                    dash = [4.0 / self.zoomLevel, 2.0 / self.zoomLevel]
+                    bp.setLineDash_count_phase_(dash, 2, 0.0)
+                bp.stroke()
 
     @objc.python_method
     def updateInfo(self, pos, layer, zoom, showFill, showNodes, showGrid,
@@ -202,6 +250,12 @@ class MagnifierView(NSView):
                             if bp:
                                 bp.setLineWidth_(1.0 / self.zoomLevel)
                                 bp.stroke()
+
+                    # 背景レイヤー内のコンポーネント（背景色で、線は破線）
+                    self.drawComponents_(
+                        self.activeLayer.background, self.bgFillColor,
+                        self.bgShowFill, self.bgShowStroke, True
+                    )
                     context.restoreGraphicsState()
 
                 # ------ 2. グリッド (メトリクスの下に描画) ------
@@ -327,14 +381,20 @@ class MagnifierView(NSView):
                         line.stroke()
                         context.restoreGraphicsState()
 
-                # ------ 5. メインパス (塗り) ------
+                # ------ 5. コンポーネント ------
+                self.drawComponents_(
+                    self.activeLayer, self.compFillColor,
+                    self.compShowFill, self.compShowStroke, True
+                )
+
+                # ------ 6. メインパス (塗り) ------
                 if self.showFill and self.activeLayer.bezierPath:
                     fg_c = self.getAdaptiveColor_(self.fillColor)
                     if fg_c:
                         fg_c.set()
                     self.activeLayer.bezierPath.fill()
 
-                # ------ 6. メインパス (線) ------
+                # ------ 7. メインパス (線) ------
                 if self.showStroke and self.activeLayer.paths:
                     fg_c = self.getAdaptiveColor_(self.fillColor)
                     if fg_c:
@@ -348,7 +408,7 @@ class MagnifierView(NSView):
                             bp.setLineWidth_(1.0 / self.zoomLevel)
                             bp.stroke()
 
-                # ------ 7. アンカー ------
+                # ------ 8. アンカー ------
                 show_anchors = Glyphs.defaults.get("showAnchors", False)
                 if show_anchors:
                     anchor_color = NSColor.colorWithCalibratedRed_green_blue_alpha_(
@@ -371,7 +431,7 @@ class MagnifierView(NSView):
                         p.fill()
                         context.restoreGraphicsState()
 
-                # ------ 8. ノード (ポイント) ------
+                # ------ 9. ノード (ポイント) ------
                 if self.showNodes and self.activeLayer.paths:
                     base_on = [2.0, 2.8, 4.0]
                     base_off = [1.2, 1.8, 2.5]
@@ -469,6 +529,9 @@ class MagnifierTool(SelectTool):
         self.pref_bg_fill = "com.mojipokke.MagnifierTool.bgShowFill"
         self.pref_bg_stroke = "com.mojipokke.MagnifierTool.bgShowStroke"
         self.pref_bg_color = "com.mojipokke.MagnifierTool.bgFillColor"
+        self.pref_comp_fill = "com.mojipokke.MagnifierTool.compShowFill"
+        self.pref_comp_stroke = "com.mojipokke.MagnifierTool.compShowStroke"
+        self.pref_comp_color = "com.mojipokke.MagnifierTool.compFillColor"
         self.pref_appearance = "com.mojipokke.MagnifierTool.appearance"
 
     def toolBarIcon(self):
@@ -620,7 +683,7 @@ class MagnifierTool(SelectTool):
         )
 
         self._window = FloatingWindow(
-            (100, 100, 280, 430), "Magnifier Tool", minSize=(280, 360)
+            (100, 100, 280, 460), "Magnifier Tool", minSize=(280, 390)
         )
         self._window.getNSWindow().setReleasedWhenClosed_(False)
 
@@ -654,6 +717,11 @@ class MagnifierTool(SelectTool):
         def_bg_color_arr = Glyphs.defaults.get(
             self.pref_bg_color, [0.8, 0.4, 0.4, 0.4]
         )
+        def_comp_fill = Glyphs.defaults.get(self.pref_comp_fill, True)
+        def_comp_stroke = Glyphs.defaults.get(self.pref_comp_stroke, True)
+        def_comp_color_arr = Glyphs.defaults.get(
+            self.pref_comp_color, [0.1, 0.55, 0.55, 0.35]
+        )
         def_appearance = Glyphs.defaults.get(self.pref_appearance, 0)
 
         try:
@@ -674,9 +742,19 @@ class MagnifierTool(SelectTool):
                 0.8, 0.4, 0.4, 0.4
             )
 
+        try:
+            default_comp_color = NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                def_comp_color_arr[0], def_comp_color_arr[1],
+                def_comp_color_arr[2], def_comp_color_arr[3]
+            )
+        except Exception:
+            default_comp_color = NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                0.1, 0.55, 0.55, 0.35
+            )
+
         # 言語ごとのレイアウト（英語ラベルは長いため幅を広げる）
         is_ja = _isJapanese()
-        lblW = 35 if is_ja else 70          # 「前面:/背景:」ラベル幅
+        lblW = 85 if is_ja else 72          # 「前面:/コンポーネント:/背景:」ラベル幅
         strokeW = 45 if is_ja else 60       # 「線」チェックボックス幅
         sliderW = 130 if is_ja else 115     # 倍率スライダー幅
         linkX = 200 if is_ja else 182       # 「倍率連動」チェックボックス位置
@@ -686,17 +764,34 @@ class MagnifierTool(SelectTool):
 
         # 前面レイヤー設定
         self._window.lblForeground = TextBox(
-            (10, -175, lblW, 17), _L("Foreground:", "前面:"), sizeStyle='small'
+            (10, -205, lblW, 17), _L("Foreground:", "前面:"), sizeStyle='small'
         )
         self._window.colorWell = ColorWell(
-            (x0, -178, 40, 24), color=default_color, callback=self.uiCallback
+            (x0, -208, 40, 24), color=default_color, callback=self.uiCallback
         )
         self._window.checkFill = CheckBox(
-            (x0 + 45, -175, 45, 20), _L("Fill", "塗り"), value=def_fill,
+            (x0 + 45, -205, 45, 20), _L("Fill", "塗り"), value=def_fill,
             callback=self.uiCallback
         )
         self._window.checkStroke = CheckBox(
-            (x0 + 90, -175, strokeW, 20), _L("Stroke", "線"), value=def_stroke,
+            (x0 + 90, -205, strokeW, 20), _L("Stroke", "線"), value=def_stroke,
+            callback=self.uiCallback
+        )
+
+        # コンポーネント設定
+        self._window.lblComponent = TextBox(
+            (10, -175, lblW, 17), _L("Component:", "コンポーネント:"),
+            sizeStyle='small'
+        )
+        self._window.compColorWell = ColorWell(
+            (x0, -178, 40, 24), color=default_comp_color, callback=self.uiCallback
+        )
+        self._window.compCheckFill = CheckBox(
+            (x0 + 45, -175, 45, 20), _L("Fill", "塗り"), value=def_comp_fill,
+            callback=self.uiCallback
+        )
+        self._window.compCheckStroke = CheckBox(
+            (x0 + 90, -175, strokeW, 20), _L("Stroke", "線"), value=def_comp_stroke,
             callback=self.uiCallback
         )
 
@@ -771,7 +866,7 @@ class MagnifierTool(SelectTool):
             (10, -30, 70, 24), _L("Reset", "リセット"), callback=self.resetCallback
         )
         self._window.versionText = TextBox(
-            (-60, -25, -10, 15), "v3.8.2", sizeStyle='mini', alignment='right'
+            (-60, -25, -10, 15), "v3.9.0", sizeStyle='mini', alignment='right'
         )
 
         doc = Glyphs.currentDocument
@@ -804,6 +899,8 @@ class MagnifierTool(SelectTool):
             Glyphs.defaults[self.pref_bg_fill] = bool(self._window.bgCheckFill.get())
             Glyphs.defaults[self.pref_bg_stroke] = bool(self._window.bgCheckStroke.get())
             Glyphs.defaults[self.pref_appearance] = int(self._window.appearancePopUp.get())
+            Glyphs.defaults[self.pref_comp_fill] = bool(self._window.compCheckFill.get())
+            Glyphs.defaults[self.pref_comp_stroke] = bool(self._window.compCheckStroke.get())
             
             c = self._window.colorWell.get()
             if c:
@@ -824,6 +921,15 @@ class MagnifierTool(SelectTool):
                     bb = bc_rgb.blueComponent()
                     ba = bc_rgb.alphaComponent()
                     Glyphs.defaults[self.pref_bg_color] = [br, bg, bb, ba]
+
+            cc = self._window.compColorWell.get()
+            if cc:
+                cc_rgb = cc.colorUsingColorSpaceName_("NSCalibratedRGBColorSpace")
+                if cc_rgb:
+                    Glyphs.defaults[self.pref_comp_color] = [
+                        cc_rgb.redComponent(), cc_rgb.greenComponent(),
+                        cc_rgb.blueComponent(), cc_rgb.alphaComponent()
+                    ]
         except Exception:
             pass
 
@@ -859,7 +965,13 @@ class MagnifierTool(SelectTool):
         )
         self._window.bgColorWell.set(default_bg_color)
 
-        self._window.setPosSize((100, 100, 280, 430))
+        self._window.compCheckFill.set(True)
+        self._window.compCheckStroke.set(True)
+        self._window.compColorWell.set(
+            NSColor.colorWithCalibratedRed_green_blue_alpha_(0.1, 0.55, 0.55, 0.35)
+        )
+
+        self._window.setPosSize((100, 100, 280, 460))
         self._window.center()
         
         doc = Glyphs.currentDocument
@@ -986,6 +1098,10 @@ class MagnifierTool(SelectTool):
             bgShowStroke = self._window.bgCheckStroke.get()
             bgFillColor = self._window.bgColorWell.get()
 
+            compShowFill = self._window.compCheckFill.get()
+            compShowStroke = self._window.compCheckStroke.get()
+            compFillColor = self._window.compColorWell.get()
+
             show_bg = Glyphs.defaults.get("showBackground", False)
             show_metrics = Glyphs.defaults.get("showMetrics", False)
             show_guides = Glyphs.defaults.get("showGuidelines", False)
@@ -997,7 +1113,9 @@ class MagnifierTool(SelectTool):
                 is_linked, show_bg, show_metrics, show_guides, show_anchors,
                 bgShowFill, bgShowStroke,
                 bgFillColor.description() if bgFillColor else None,
-                nodeSizeIndex
+                nodeSizeIndex,
+                compShowFill, compShowStroke,
+                compFillColor.description() if compFillColor else None
             )
 
             if not force and hasattr(self, '_last_drawn_state') and \
@@ -1007,6 +1125,9 @@ class MagnifierTool(SelectTool):
             self._last_drawn_state = current_state
             self._lastMousePos = new_pos
 
+            self._magnifierView.updateComponentInfo(
+                compShowFill, compShowStroke, compFillColor
+            )
             self._magnifierView.updateInfo(
                 new_pos, layer, zoom, showFill, showNodes, showGrid,
                 showStroke, fillColor, bgShowFill, bgShowStroke, bgFillColor,
