@@ -39,7 +39,7 @@ A tool plugin for [Glyphs](https://glyphsapp.com/) that shows a magnified view o
 
 ### Author
 
-Yutaka Ozawa (mojipokke)
+Yutaka Ozawa ([mojipokke] (https://www.mojipokke.jp/))
 
 ---
 
@@ -78,4 +78,4 @@ Yutaka Ozawa (mojipokke)
 
 ### 作者
 
-Yutaka Ozawa (mojipokke)
+Yutaka Ozawa ([mojipokke] (https://www.mojipokke.jp/))
