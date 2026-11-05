@@ -23,6 +23,7 @@ A tool plugin for [Glyphs](https://glyphsapp.com/) that shows a magnified view o
 - Appearance setting (Follow System / Follow Glyphs / Light / Dark)
 - Reflects Edit tab display options (background, metrics, guides, anchors, etc.)
 - UI text follows the Glyphs language setting (Japanese / English)
+- Compact window with a zoom slider and a settings popover; controls use Auto Layout
 
 ### Installation
 
@@ -35,8 +36,8 @@ A tool plugin for [Glyphs](https://glyphsapp.com/) that shows a magnified view o
 
 1. Select Magnifier Tool in the toolbar to open its window.
 2. The window stays open when you switch tools and keeps magnifying the area around the cursor in real time.
-3. Color, fill and stroke can be set independently for the foreground and the background (colors are adjusted automatically for Dark Mode).
-4. Check "Link Zoom" to make the magnification follow zooming in the Edit tab.
+3. Use the zoom slider or the numeric field beside it below the magnified view. Click the settings button in the lower-right corner to open the other controls, including colors, fill, stroke, nodes, grid, appearance and reset (colors are adjusted automatically for Dark Mode).
+4. In the settings popover, check "Link Zoom" to make the magnification follow zooming in the Edit tab.
 5. When all Edit tabs are closed, the tool goes into standby and returns to its previous position when you open a glyph again.
 
 ### Author
@@ -68,6 +69,7 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for detai
 - 外観設定（OS連動／アプリ連動／ライト／ダーク）
 - 編集タブの表示オプション（背景、メトリクス、ガイド、アンカー等）を反映
 - UI は Glyphs の言語設定（日本語／英語）に応じて自動で切り替え
+- メインウィンドウには倍率スライダーと設定ボタンを配置し、各コントロールは Auto Layout に対応
 
 ### インストール
 
@@ -80,8 +82,8 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for detai
 
 1. ツールバーから Magnifier Tool を選択し、ウィンドウを開きます。
 2. 他のツールに切り替えてもウィンドウは保持され、カーソル周辺をリアルタイムに拡大します。
-3. 前面・背景それぞれ独立して、カラーや塗り・線の表示を切り替えられます（ダークモード時は自動で視認性の高い明度に調整）。
-4. 「倍率連動」にチェックを入れると、編集タブのズームイン／アウトに連動して拡大率が変化します。
+3. 拡大画面の下のスライダーまたは隣の数値入力で倍率を変更できます。右下の設定ボタンをクリックすると、カラー、塗り、線、ポイント、グリッド、外観、リセットなどの設定が開きます（ダークモード時は自動で視認性の高い明度に調整）。
+4. 設定ポップオーバー内の「倍率連動」にチェックを入れると、編集タブのズームイン／アウトに連動して拡大率が変化します。
 5. 編集タブをすべて閉じると自動で待機状態になり、再びグリフを開くと元の位置に復帰します。
 
 ### 作者

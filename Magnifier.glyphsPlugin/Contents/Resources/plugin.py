@@ -2,26 +2,26 @@
 # Author: Yutaka Ozawa (mojipokke)
 # Date: 2026-11-03 13:55:34 JST
 # Version: v3.10.0
-#MenuTitle: Magnifier Tool
+#MenuTitle: Magnifier
 
 from __future__ import division, print_function, unicode_literals
 
 __doc__ = """
-Magnifier Tool v3.10.0
+Magnifier v3.10.0
 
 概要:
-カーソル周辺を拡大表示するGlyphs用ツールプラグインです。
+カーソル周辺を拡大表示するGlyphs用プラグインです。
 NSTimerを用いた60fpsのリアルタイム同期と、永続ウィンドウ管理を実装しています。
 和文・欧文に連動するメトリクス表示、および背景レイヤーの独立した色/塗り/線設定に対応しています。
 ポイントサイズの変更や、ダークモード/ライトモードのアピアランス設定に完全対応しています。
 
 使い方:
-1. ツールバーからMagnifier Toolを選択し、ウィンドウを開きます。
+1. 「ウインドウ」メニューから「Magnifier」を選択し、ウィンドウを開きます。
 2. 他のツール（ペンツール等）に切り替えてもウィンドウは保持され、カーソル周辺をリアルタイムに拡大します。
 3. 前面・背景それぞれ独立して、カラーや塗り・線の表示を切り替えることができます。
    （指定したカラーは、ダークモード時に自動で視認性の高い明度に調整されます）
 4. ポイントサイズの変更や、OS・編集タブに連動するアピアランス設定が可能です。
-5. 左下の「倍率連動」にチェックを入れると、編集タブのズームイン/アウトに連動して拡大率が変化します。
+5. 右下の設定ボタンから「倍率連動」にチェックを入れると、編集タブのズームイン/アウトに連動して拡大率が変化します。
 6. 編集タブの表示オプション（背景、メトリクス、ガイド、アンカー等）のON/OFFが拡大画面にも反映されます。
 7. 編集タブをすべて閉じると安全のために自動で待機状態になり、再びグリフを開くと元の位置に復帰します。
 8. UIのテキストは Glyphs の言語設定（日本語／英語）に応じて自動で切り替わります。
@@ -31,14 +31,14 @@ NSTimerを用いた60fpsのリアルタイム同期と、永続ウィンドウ�
     編集画面と同じ並びで拡大表示されます（ポイント等はアクティブなグリフのみ）。
 
 Overview:
-A tool plugin for Glyphs that shows a magnified view of the area around the cursor.
+A plugin for Glyphs that shows a magnified view of the area around the cursor.
 It provides real-time 60 fps updates driven by NSTimer and a persistent window.
 It displays metrics that adapt to CJK and Latin glyphs, and offers separate
 color / fill / stroke settings for the background layer.
 Node size can be changed, and Dark Mode / Light Mode appearance is fully supported.
 
 Usage:
-1. Select Magnifier Tool in the toolbar to open its window.
+1. Choose Window > Magnifier to open its window.
 2. The window stays open even when you switch to another tool (Pen tool, etc.)
    and keeps magnifying the area around the cursor in real time.
 3. Color, fill and stroke display can be set independently for the foreground
@@ -47,8 +47,8 @@ Usage:
    that stays easy to see.)
 4. You can change the node size and set the appearance to follow the system
    or the Edit tab.
-5. Check "Link Zoom" to make the magnification follow zooming in and out
-   in the Edit tab.
+5. Open Settings in the lower-right corner and check "Link Zoom" to make the
+   magnification follow zooming in and out in the Edit tab.
 6. Display options of the Edit tab (background, metrics, guides, anchors, etc.)
    are also reflected in the magnified view when turned on or off.
 7. When all Edit tabs are closed, the tool goes into standby for safety,
@@ -62,20 +62,20 @@ Usage:
     (nodes, anchors and metrics are shown for the active glyph only).
 """
 
-import os
-import traceback
 import objc
-from GlyphsApp import Glyphs, OFFCURVE
-from GlyphsApp.plugins import SelectTool
+from GlyphsApp import Glyphs, OFFCURVE, WINDOW_MENU
+from GlyphsApp.plugins import GeneralPlugin
+from GlyphsApp.UI import MenuItem
 from vanilla import (
     FloatingWindow, Slider, EditText, CheckBox, TextBox, ColorWell, Button,
-    PopUpButton
+    PopUpButton, Group
 )
-from AppKit import (
+from Cocoa import (
     NSView, NSColor, NSBezierPath, NSAffineTransform,
-    NSGraphicsContext, NSMakeRect, NSMakePoint, NSBundle,
-    NSViewWidthSizable, NSViewHeightSizable,
-    NSNotificationCenter, NSEvent, NSTimer, NSImage, NSApp,
+    NSGraphicsContext, NSMakeRect, NSMakePoint,
+    NSLayoutConstraint, NSViewController, NSPopover,
+    NSPopoverBehaviorSemitransient, NSMaxYEdge,
+    NSNotificationCenter, NSEvent, NSTimer, NSImage, NSImageOnly, NSApp,
     NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua
 )
 
@@ -86,10 +86,6 @@ def _L(en, ja):
         return Glyphs.localize({'en': en, 'ja': ja})
     except Exception:
         return en
-
-
-def _isJapanese():
-    return _L('en', 'ja') == 'ja'
 
 
 class MagnifierView(NSView):
@@ -247,7 +243,7 @@ class MagnifierView(NSView):
             appearance_name = ""
             if hasattr(self, 'effectiveAppearance') and self.effectiveAppearance():
                 appearance_name = self.effectiveAppearance().name()
-            
+
             if 'Dark' in appearance_name:
                 rgb = color.colorUsingColorSpaceName_("NSCalibratedRGBColorSpace")
                 if rgb:
@@ -255,7 +251,7 @@ class MagnifierView(NSView):
                     s = rgb.saturationComponent()
                     b = rgb.brightnessComponent()
                     a = rgb.alphaComponent()
-                    
+
                     # ダークモード用に明度を反転し、彩度を少し抑える
                     new_b = max(b, 1.0 - b)
                     new_s = s * 0.8
@@ -299,7 +295,7 @@ class MagnifierView(NSView):
                 if show_bg and self.activeLayer.background:
                     context.saveGraphicsState()
                     bg_c = self.getAdaptiveColor_(self.bgFillColor)
-                    
+
                     if self.bgShowFill:
                         if bg_c:
                             bg_c.set()
@@ -470,7 +466,7 @@ class MagnifierView(NSView):
                         fg_c.colorWithAlphaComponent_(1.0).set()
                     else:
                         NSColor.textColor().set()
-                        
+
                     for path in self.activeLayer.paths:
                         bp = path.bezierPath
                         if bp:
@@ -507,7 +503,7 @@ class MagnifierView(NSView):
                     idx = getattr(self, 'nodeSizeIndex', 1)
                     if idx < 0 or idx > 2:
                         idx = 1
-                    
+
                     onCurveRadius = base_on[idx] / self.zoomLevel
                     offCurveRadius = base_off[idx] / self.zoomLevel
                     NSColor.lightGrayColor().set()
@@ -576,16 +572,17 @@ class MagnifierView(NSView):
             pass
 
 
-class MagnifierTool(SelectTool):
+class MagnifierPlugin(GeneralPlugin):
     @objc.python_method
     def settings(self):
         self.name = 'Magnifier'
-        self.keyboardShortcut = None
         self._window = None
+        self._settings = None
+        self._settingsPopover = None
         self._lastMousePos = None
         self._timer = None
         self._auto_hidden = False
-        
+
         self.pref_zoom = "com.mojipokke.MagnifierTool.zoom"
         self.pref_fill = "com.mojipokke.MagnifierTool.showFill"
         self.pref_nodes = "com.mojipokke.MagnifierTool.showNodes"
@@ -603,22 +600,10 @@ class MagnifierTool(SelectTool):
         self.pref_comp_color = "com.mojipokke.MagnifierTool.compFillColor"
         self.pref_appearance = "com.mojipokke.MagnifierTool.appearance"
 
-    def toolBarIcon(self):
-        icon_path = os.path.join(
-            os.path.dirname(__file__), "ToolbarIconTemplate.pdf"
-        )
-        if os.path.exists(icon_path):
-            image = NSImage.alloc().initWithContentsOfFile_(icon_path)
-            if image:
-                image.setTemplate_(True)
-                return image
-
-        bundle = NSBundle.bundleForClass_(self.__class__)
-        return bundle.imageForResource_("ToolbarIconTemplate")
-
     @objc.python_method
     def start(self):
-        pass
+        self._menuItem = MenuItem(self.name, action=self.showWindow_, target=self)
+        Glyphs.menu[WINDOW_MENU].append(self._menuItem)
 
     @objc.python_method
     def startTimer(self):
@@ -633,29 +618,11 @@ class MagnifierTool(SelectTool):
             self._timer.invalidate()
             self._timer = None
 
-    @objc.python_method
-    def activate(self):
+    def showWindow_(self, sender):
         self._auto_hidden = False
-        if self._window:
-            if not self._window.getNSWindow().isVisible():
-                def_frame = Glyphs.defaults.get(self.pref_frame)
-                if def_frame and isinstance(def_frame, str):
-                    self._window.getNSWindow().setFrameFromString_(def_frame)
-
-                self._window.show()
-
-                if def_frame and isinstance(def_frame, str):
-                    self._window.getNSWindow().setFrameFromString_(def_frame)
-
-            self.startTimer()
-            self.updateMagnifierView(force=True)
-        else:
-            self.openWindow()
-
-    @objc.python_method
-    def deactivate(self):
-        if self._window:
-            self.saveDefaults()
+        self.openWindow()
+        self._window.getNSWindow().makeKeyAndOrderFront_(self)
+        self.updateMagnifierView(force=True)
 
     def interfaceUpdated_(self, notification):
         self.updateMagnifierView(force=True)
@@ -665,6 +632,7 @@ class MagnifierTool(SelectTool):
         self._auto_hidden = False
         self.saveDefaults(save_frame=True)
         self.stopTimer()
+        self.closeSettings()
         if self._window:
             self._window.hide()
         return False
@@ -672,7 +640,10 @@ class MagnifierTool(SelectTool):
     @objc.python_method
     def windowDidClose(self, sender):
         self.stopTimer()
+        self.closeSettings()
         self._window = None
+        self._settings = None
+        self._settingsPopover = None
 
     @objc.python_method
     def windowDidMove(self, sender):
@@ -681,8 +652,6 @@ class MagnifierTool(SelectTool):
     @objc.python_method
     def windowDidResize(self, sender):
         if self._window and hasattr(self, '_magnifierView'):
-            content_bounds = self._window.getNSWindow().contentView().bounds()
-            self._magnifierView.setFrame_(content_bounds)
             self._magnifierView.setNeedsDisplay_(True)
         self.saveDefaults()
 
@@ -697,8 +666,8 @@ class MagnifierTool(SelectTool):
         if not hasattr(self, '_window') or not self._window:
             return
         nswindow = self._window.getNSWindow()
-        idx = int(self._window.appearancePopUp.get())
-        
+        idx = int(self._settings.appearancePopUp.get())
+
         target_appearance = None
         if idx == 0:  # OS連動
             target_appearance = None
@@ -716,9 +685,11 @@ class MagnifierTool(SelectTool):
             target_appearance = NSAppearance.appearanceNamed_(NSAppearanceNameAqua)
         elif idx == 3:  # ダーク
             target_appearance = NSAppearance.appearanceNamed_(NSAppearanceNameDarkAqua)
-            
+
         if nswindow.appearance() != target_appearance:
             nswindow.setAppearance_(target_appearance)
+        if self._settingsPopover.appearance() != target_appearance:
+            self._settingsPopover.setAppearance_(target_appearance)
 
     @objc.python_method
     def appearanceCallback(self, sender):
@@ -752,7 +723,7 @@ class MagnifierTool(SelectTool):
         )
 
         self._window = FloatingWindow(
-            (100, 100, 280, 460), "Magnifier Tool", minSize=(280, 390)
+            (100, 100, 280, 300), self.name, minSize=(220, 180)
         )
         self._window.getNSWindow().setReleasedWhenClosed_(False)
 
@@ -765,11 +736,8 @@ class MagnifierTool(SelectTool):
         self._window.bind("resize", self.windowDidResize)
         self._window.bind("move", self.windowDidMove)
 
-        content_bounds = self._window.getNSWindow().contentView().bounds()
-        self._magnifierView = MagnifierView.alloc().initWithFrame_(content_bounds)
-        self._magnifierView.setAutoresizingMask_(
-            NSViewWidthSizable | NSViewHeightSizable
-        )
+        self._magnifierView = MagnifierView.alloc().initWithFrame_(NSMakeRect(0, 0, 0, 0))
+        self._magnifierView.setTranslatesAutoresizingMaskIntoConstraints_(False)
         self._window.getNSWindow().contentView().addSubview_(self._magnifierView)
 
         def_zoom = Glyphs.defaults.get(self.pref_zoom, 4.0)
@@ -821,105 +789,69 @@ class MagnifierTool(SelectTool):
                 0.1, 0.55, 0.55, 0.35
             )
 
-        # 言語ごとのレイアウト（英語ラベルは長いため幅を広げる）
-        is_ja = _isJapanese()
-        lblW = 85 if is_ja else 72          # 「前面:/コンポーネント:/背景:」ラベル幅
-        strokeW = 45 if is_ja else 60       # 「線」チェックボックス幅
-        sliderW = 130 if is_ja else 115     # 倍率スライダー幅
-        linkX = 200 if is_ja else 182       # 「倍率連動」チェックボックス位置
-        linkW = 70 if is_ja else 92
-        apprW = 45 if is_ja else 68         # 「外観:」ラベル幅
-        x0 = 10 + lblW
+        # The popover keeps its controls alive between presentations, so defaults,
+        # callbacks and the timer use the same state even while it is closed.
+        self._settings = Group((0, 0, 400, 264))
+        settings = self._settings
+        controller = NSViewController.alloc().init()
+        controller.setView_(settings.getNSView())
+        self._settingsPopover = NSPopover.alloc().init()
+        self._settingsPopover.setContentViewController_(controller)
+        self._settingsPopover.setContentSize_((400, 264))
+        # Allow the shared color panel to stay open while editing a color well.
+        self._settingsPopover.setBehavior_(NSPopoverBehaviorSemitransient)
 
-        # 前面レイヤー設定
-        self._window.lblForeground = TextBox(
-            (10, -205, lblW, 17), _L("Foreground:", "前面:"), sizeStyle='small'
+        settings.lblForeground = TextBox("auto", _L("Foreground:", "前面:"))
+        settings.colorWell = ColorWell(
+            "auto", color=default_color, callback=self.uiCallback
         )
-        self._window.colorWell = ColorWell(
-            (x0, -208, 40, 24), color=default_color, callback=self.uiCallback
+        settings.checkFill = CheckBox(
+            "auto", _L("Fill", "塗り"), value=def_fill, callback=self.uiCallback
         )
-        self._window.checkFill = CheckBox(
-            (x0 + 45, -205, 45, 20), _L("Fill", "塗り"), value=def_fill,
+        settings.checkStroke = CheckBox(
+            "auto", _L("Stroke", "線"), value=def_stroke, callback=self.uiCallback
+        )
+        settings.lblComponent = TextBox("auto", _L("Component:", "コンポーネント:"))
+        settings.compColorWell = ColorWell(
+            "auto", color=default_comp_color, callback=self.uiCallback
+        )
+        settings.compCheckFill = CheckBox(
+            "auto", _L("Fill", "塗り"), value=def_comp_fill, callback=self.uiCallback
+        )
+        settings.compCheckStroke = CheckBox(
+            "auto", _L("Stroke", "線"), value=def_comp_stroke, callback=self.uiCallback
+        )
+        settings.lblBackground = TextBox("auto", _L("Background:", "背景:"))
+        settings.bgColorWell = ColorWell(
+            "auto", color=default_bg_color, callback=self.uiCallback
+        )
+        settings.bgCheckFill = CheckBox(
+            "auto", _L("Fill", "塗り"), value=def_bg_fill, callback=self.uiCallback
+        )
+        settings.bgCheckStroke = CheckBox(
+            "auto", _L("Stroke", "線"), value=def_bg_stroke, callback=self.uiCallback
+        )
+        settings.checkNodes = CheckBox(
+            "auto", _L("Nodes", "ポイント"), value=def_nodes, callback=self.uiCallback
+        )
+        settings.nodeSizePopUp = PopUpButton(
+            "auto", [_L("S", "小"), _L("M", "中"), _L("L", "大")],
             callback=self.uiCallback
         )
-        self._window.checkStroke = CheckBox(
-            (x0 + 90, -205, strokeW, 20), _L("Stroke", "線"), value=def_stroke,
-            callback=self.uiCallback
+        settings.nodeSizePopUp.set(def_node_size)
+        settings.checkGrid = CheckBox(
+            "auto", _L("Grid", "グリッド"), value=def_grid, callback=self.uiCallback
         )
-
-        # コンポーネント設定
-        self._window.lblComponent = TextBox(
-            (10, -175, lblW, 17), _L("Component:", "コンポーネント:"),
-            sizeStyle='small'
+        settings.checkLink = CheckBox(
+            "auto", _L("Link Zoom", "倍率連動"), value=def_link, callback=self.uiCallback
         )
-        self._window.compColorWell = ColorWell(
-            (x0, -178, 40, 24), color=default_comp_color, callback=self.uiCallback
-        )
-        self._window.compCheckFill = CheckBox(
-            (x0 + 45, -175, 45, 20), _L("Fill", "塗り"), value=def_comp_fill,
-            callback=self.uiCallback
-        )
-        self._window.compCheckStroke = CheckBox(
-            (x0 + 90, -175, strokeW, 20), _L("Stroke", "線"), value=def_comp_stroke,
-            callback=self.uiCallback
-        )
-
-        # 背景レイヤー設定
-        self._window.lblBackground = TextBox(
-            (10, -145, lblW, 17), _L("Background:", "背景:"), sizeStyle='small'
-        )
-        self._window.bgColorWell = ColorWell(
-            (x0, -148, 40, 24), color=default_bg_color, callback=self.uiCallback
-        )
-        self._window.bgCheckFill = CheckBox(
-            (x0 + 45, -145, 45, 20), _L("Fill", "塗り"), value=def_bg_fill,
-            callback=self.uiCallback
-        )
-        self._window.bgCheckStroke = CheckBox(
-            (x0 + 90, -145, strokeW, 20), _L("Stroke", "線"), value=def_bg_stroke,
-            callback=self.uiCallback
-        )
-
-        # ポイントとグリッド
-        self._window.checkNodes = CheckBox(
-            (10, -115, 70, 20), _L("Nodes", "ポイント"), value=def_nodes,
-            callback=self.uiCallback
-        )
-        self._window.nodeSizePopUp = PopUpButton(
-            (80, -115, 50, 20),
-            [_L("S", "小"), _L("M", "中"), _L("L", "大")],
-            callback=self.uiCallback
-        )
-        self._window.nodeSizePopUp.set(def_node_size)
-        self._window.checkGrid = CheckBox(
-            (140, -115, 70, 20), _L("Grid", "グリッド"), value=def_grid,
-            callback=self.uiCallback
-        )
-
-        # 倍率と連動
-        self._window.zoomText = EditText(
-            (10, -85, 45, 22), text=f"{def_zoom:.1f}",
-            callback=self.textCallback, continuous=False
-        )
-        self._window.slider = Slider(
-            (60, -84, sliderW, 20), minValue=1.0, maxValue=50.0,
-            value=def_zoom, callback=self.uiCallback
-        )
-        self._window.checkLink = CheckBox(
-            (linkX, -85, linkW, 20), _L("Link Zoom", "倍率連動"), value=def_link,
-            callback=self.uiCallback
-        )
-        self._window.checkLink.getNSButton().setToolTip_(_L(
+        settings.checkLink.getNSButton().setToolTip_(_L(
             "Scale the magnification with the Edit view zoom",
             "編集タブのズームに連動して拡大率を変化させます"
         ))
-
-        # アピアランス設定
-        self._window.lblAppearance = TextBox(
-            (10, -55, apprW, 17), _L("Appearance:", "外観:"), sizeStyle='small'
-        )
-        self._window.appearancePopUp = PopUpButton(
-            (10 + apprW, -55, 130, 20),
+        settings.lblAppearance = TextBox("auto", _L("Appearance:", "外観:"))
+        settings.appearancePopUp = PopUpButton(
+            "auto",
             [
                 _L("Follow System", "OS連動"),
                 _L("Follow Glyphs", "アプリ連動"),
@@ -928,15 +860,36 @@ class MagnifierTool(SelectTool):
             ],
             callback=self.appearanceCallback
         )
-        self._window.appearancePopUp.set(def_appearance)
+        settings.appearancePopUp.set(def_appearance)
+        settings.btnReset = Button(
+            "auto", _L("Reset", "リセット"), callback=self.resetCallback
+        )
+        settings.versionText = TextBox(
+            "auto", "v3.10.0", sizeStyle='mini', alignment='right'
+        )
+        self.layoutSettings()
 
-        # Resetボタンを左下へ、バージョンテキストを右下へ配置
-        self._window.btnReset = Button(
-            (10, -30, 70, 24), _L("Reset", "リセット"), callback=self.resetCallback
+        self._window.slider = Slider(
+            "auto", minValue=1.0, maxValue=50.0, value=def_zoom, callback=self.uiCallback
         )
-        self._window.versionText = TextBox(
-            (-60, -25, -10, 15), "v3.10.0", sizeStyle='mini', alignment='right'
+        self._window.slider.getNSSlider().setToolTip_(_L("Zoom", "倍率"))
+        self._window.zoomText = EditText(
+            "auto", text=f"{def_zoom:.1f}", callback=self.textCallback, continuous=False
         )
+        self._window.zoomText.getNSTextField().setToolTip_(_L("Zoom", "倍率"))
+        self._window.zoomText.getNSTextField().setAccessibilityLabel_(_L("Zoom", "倍率"))
+        self._window.settingsButton = Button(
+            "auto", "", callback=self.settingsCallback
+        )
+        settingsButton = self._window.settingsButton.getNSButton()
+        settingsButton.setBordered_(False)
+        settingsButton.setImage_(NSImage.imageWithSystemSymbolName_accessibilityDescription_(
+            "gearshape", _L("Settings", "設定")
+        ))
+        settingsButton.setImagePosition_(NSImageOnly)
+        settingsButton.setToolTip_(_L("Settings", "設定"))
+        settingsButton.setAccessibilityLabel_(_L("Settings", "設定"))
+        self.layoutWindow()
 
         doc = Glyphs.currentDocument
         evc = None
@@ -951,6 +904,89 @@ class MagnifierTool(SelectTool):
         self.startTimer()
 
     @objc.python_method
+    def layoutWindow(self):
+        content = self._window.getNSWindow().contentView()
+        view = self._magnifierView
+        slider = self._window.slider.getNSSlider()
+        zoomText = self._window.zoomText.getNSTextField()
+        button = self._window.settingsButton.getNSButton()
+        NSLayoutConstraint.activateConstraints_([
+            view.leadingAnchor().constraintEqualToAnchor_(content.leadingAnchor()),
+            view.trailingAnchor().constraintEqualToAnchor_(content.trailingAnchor()),
+            view.topAnchor().constraintEqualToAnchor_(content.topAnchor()),
+            view.bottomAnchor().constraintEqualToAnchor_(content.bottomAnchor()),
+            button.trailingAnchor().constraintEqualToAnchor_constant_(content.trailingAnchor(), -6),
+            button.bottomAnchor().constraintEqualToAnchor_constant_(content.bottomAnchor(), -6),
+            button.widthAnchor().constraintEqualToConstant_(32),
+            button.heightAnchor().constraintEqualToConstant_(24),
+            slider.leadingAnchor().constraintEqualToAnchor_constant_(content.leadingAnchor(), 10),
+            slider.trailingAnchor().constraintEqualToAnchor_constant_(zoomText.leadingAnchor(), -8),
+            slider.centerYAnchor().constraintEqualToAnchor_(button.centerYAnchor()),
+            zoomText.trailingAnchor().constraintEqualToAnchor_constant_(button.leadingAnchor(), -8),
+            zoomText.centerYAnchor().constraintEqualToAnchor_(button.centerYAnchor()),
+            zoomText.widthAnchor().constraintEqualToConstant_(50),
+            zoomText.heightAnchor().constraintEqualToConstant_(22),
+            #slider.heightAnchor().constraintEqualToConstant_(20),
+        ])
+
+    @objc.python_method
+    def layoutSettings(self):
+        settings = self._settings
+        rules = [
+            "V:|-16-[colorWell(26)]-8-[compColorWell(26)]-8-[bgColorWell(26)]"
+            "-12-[checkNodes(24)]-8-[checkLink(24)]-8-[appearancePopUp(26)]"
+            "-12-[btnReset(24)]-16-|",
+            "H:|-16-[checkNodes]-[nodeSizePopUp(60)]-20-[checkGrid]-(>=16)-|",
+            "H:|-16-[checkLink]-(>=16)-|",
+            "H:|-16-[lblAppearance]-[appearancePopUp]-(>=16)-|",
+            "H:|-16-[btnReset(>=80)]-(>=16)-[versionText]-16-|",
+        ]
+        # Shared column widths follow the longest localized label's intrinsic size.
+        rows = [
+            ('lblForeground', 'colorWell', 'checkFill', 'checkStroke'),
+            ('lblComponent', 'compColorWell', 'compCheckFill', 'compCheckStroke'),
+            ('lblBackground', 'bgColorWell', 'bgCheckFill', 'bgCheckStroke'),
+        ]
+        for label, well, fill, stroke in rows:
+            labelWidth = '' if label == 'lblForeground' else '(==lblForeground)'
+            fillWidth = '' if fill == 'checkFill' else '(==checkFill)'
+            strokeWidth = '' if stroke == 'checkStroke' else '(==checkStroke)'
+            rules.append(
+                "H:|-16-[%s%s]-[%s(44)]-[%s%s]-[%s%s]-(>=16)-|"
+                % (label, labelWidth, well, fill, fillWidth, stroke, strokeWidth)
+            )
+        alignedRows = [
+            (settings.colorWell, (settings.lblForeground, settings.checkFill, settings.checkStroke)),
+            (settings.compColorWell, (settings.lblComponent, settings.compCheckFill, settings.compCheckStroke)),
+            (settings.bgColorWell, (settings.lblBackground, settings.bgCheckFill, settings.bgCheckStroke)),
+            (settings.checkNodes, (settings.nodeSizePopUp, settings.checkGrid)),
+            (settings.appearancePopUp, (settings.lblAppearance,)),
+            (settings.btnReset, (settings.versionText,)),
+        ]
+        for reference, controls in alignedRows:
+            for control in controls:
+                rules.append(dict(
+                    view1=control, attribute1='centerY',
+                    view2=reference, attribute2='centerY'
+                ))
+        settings.addAutoPosSizeRules(rules)
+
+    @objc.python_method
+    def settingsCallback(self, sender):
+        if self._settingsPopover.isShown():
+            self.closeSettings()
+        else:
+            button = sender.getNSButton()
+            self._settingsPopover.showRelativeToRect_ofView_preferredEdge_(
+                button.bounds(), button, NSMaxYEdge
+            )
+
+    @objc.python_method
+    def closeSettings(self):
+        if self._settingsPopover and self._settingsPopover.isShown():
+            self._settingsPopover.close()
+
+    @objc.python_method
     def saveDefaults(self, save_frame=True):
         if not hasattr(self, '_window') or self._window is None:
             return
@@ -959,19 +995,19 @@ class MagnifierTool(SelectTool):
 
         try:
             Glyphs.defaults[self.pref_zoom] = float(self._window.slider.get())
-            Glyphs.defaults[self.pref_fill] = bool(self._window.checkFill.get())
-            Glyphs.defaults[self.pref_nodes] = bool(self._window.checkNodes.get())
-            Glyphs.defaults[self.pref_node_size] = int(self._window.nodeSizePopUp.get())
-            Glyphs.defaults[self.pref_grid] = bool(self._window.checkGrid.get())
-            Glyphs.defaults[self.pref_stroke] = bool(self._window.checkStroke.get())
-            Glyphs.defaults[self.pref_link] = bool(self._window.checkLink.get())
-            Glyphs.defaults[self.pref_bg_fill] = bool(self._window.bgCheckFill.get())
-            Glyphs.defaults[self.pref_bg_stroke] = bool(self._window.bgCheckStroke.get())
-            Glyphs.defaults[self.pref_appearance] = int(self._window.appearancePopUp.get())
-            Glyphs.defaults[self.pref_comp_fill] = bool(self._window.compCheckFill.get())
-            Glyphs.defaults[self.pref_comp_stroke] = bool(self._window.compCheckStroke.get())
-            
-            c = self._window.colorWell.get()
+            Glyphs.defaults[self.pref_fill] = bool(self._settings.checkFill.get())
+            Glyphs.defaults[self.pref_nodes] = bool(self._settings.checkNodes.get())
+            Glyphs.defaults[self.pref_node_size] = int(self._settings.nodeSizePopUp.get())
+            Glyphs.defaults[self.pref_grid] = bool(self._settings.checkGrid.get())
+            Glyphs.defaults[self.pref_stroke] = bool(self._settings.checkStroke.get())
+            Glyphs.defaults[self.pref_link] = bool(self._settings.checkLink.get())
+            Glyphs.defaults[self.pref_bg_fill] = bool(self._settings.bgCheckFill.get())
+            Glyphs.defaults[self.pref_bg_stroke] = bool(self._settings.bgCheckStroke.get())
+            Glyphs.defaults[self.pref_appearance] = int(self._settings.appearancePopUp.get())
+            Glyphs.defaults[self.pref_comp_fill] = bool(self._settings.compCheckFill.get())
+            Glyphs.defaults[self.pref_comp_stroke] = bool(self._settings.compCheckStroke.get())
+
+            c = self._settings.colorWell.get()
             if c:
                 c_rgb = c.colorUsingColorSpaceName_("NSCalibratedRGBColorSpace")
                 if c_rgb:
@@ -981,7 +1017,7 @@ class MagnifierTool(SelectTool):
                     a = c_rgb.alphaComponent()
                     Glyphs.defaults[self.pref_color] = [r, g, b, a]
 
-            bc = self._window.bgColorWell.get()
+            bc = self._settings.bgColorWell.get()
             if bc:
                 bc_rgb = bc.colorUsingColorSpaceName_("NSCalibratedRGBColorSpace")
                 if bc_rgb:
@@ -991,7 +1027,7 @@ class MagnifierTool(SelectTool):
                     ba = bc_rgb.alphaComponent()
                     Glyphs.defaults[self.pref_bg_color] = [br, bg, bb, ba]
 
-            cc = self._window.compColorWell.get()
+            cc = self._settings.compColorWell.get()
             if cc:
                 cc_rgb = cc.colorUsingColorSpaceName_("NSCalibratedRGBColorSpace")
                 if cc_rgb:
@@ -1014,35 +1050,38 @@ class MagnifierTool(SelectTool):
     def resetCallback(self, sender):
         if not hasattr(self, '_window'):
             return
+        if self._window is None:
+            return
         self._window.slider.set(4.0)
         self._window.zoomText.set("4.0")
-        self._window.checkFill.set(True)
-        self._window.checkNodes.set(True)
-        self._window.nodeSizePopUp.set(1)
-        self._window.checkGrid.set(True)
-        self._window.checkStroke.set(True)
-        self._window.checkLink.set(False)
-        self._window.appearancePopUp.set(0)
+        self._settings.checkFill.set(True)
+        self._settings.checkNodes.set(True)
+        self._settings.nodeSizePopUp.set(1)
+        self._settings.checkGrid.set(True)
+        self._settings.checkStroke.set(True)
+        self._settings.checkLink.set(False)
+        self._settings.appearancePopUp.set(0)
 
         default_color = NSColor.colorWithCalibratedWhite_alpha_(0.0, 0.4)
-        self._window.colorWell.set(default_color)
+        self._settings.colorWell.set(default_color)
 
-        self._window.bgCheckFill.set(True)
-        self._window.bgCheckStroke.set(True)
+        self._settings.bgCheckFill.set(True)
+        self._settings.bgCheckStroke.set(True)
         default_bg_color = NSColor.colorWithCalibratedRed_green_blue_alpha_(
             0.8, 0.4, 0.4, 0.4
         )
-        self._window.bgColorWell.set(default_bg_color)
+        self._settings.bgColorWell.set(default_bg_color)
 
-        self._window.compCheckFill.set(True)
-        self._window.compCheckStroke.set(True)
-        self._window.compColorWell.set(
+        self._settings.compCheckFill.set(True)
+        self._settings.compCheckStroke.set(True)
+        self._settings.compColorWell.set(
             NSColor.colorWithCalibratedRed_green_blue_alpha_(0.1, 0.55, 0.55, 0.35)
         )
 
-        self._window.setPosSize((100, 100, 280, 460))
+        self.closeSettings()
+        self._window.setPosSize((100, 100, 280, 300))
         self._window.center()
-        
+
         doc = Glyphs.currentDocument
         evc = None
         if doc and doc.windowController():
@@ -1054,6 +1093,8 @@ class MagnifierTool(SelectTool):
     @objc.python_method
     def uiCallback(self, sender):
         if not hasattr(self, '_window') or not hasattr(self, '_magnifierView'):
+            return
+        if self._window is None:
             return
         zoom = float(self._window.slider.get())
         if sender == self._window.slider:
@@ -1075,12 +1116,6 @@ class MagnifierTool(SelectTool):
             if hasattr(self, '_window'):
                 current_zoom = self._window.slider.get()
                 sender.set(f"{current_zoom:.1f}")
-
-    def mouseMoved_(self, event):
-        try:
-            self.updateMagnifierView(force=False)
-        except Exception:
-            pass
 
     @objc.python_method
     def _tabLayers(self, evc):
@@ -1194,10 +1229,10 @@ class MagnifierTool(SelectTool):
                 evc = doc.windowController().activeEditViewController()
 
             # 編集タブのアピアランスと動的に同期（設定が「アプリ連動(1)」の場合）
-            if hasattr(self, '_window') and int(self._window.appearancePopUp.get()) == 1:
+            if hasattr(self, '_window') and int(self._settings.appearancePopUp.get()) == 1:
                 self.applyAppearance(evc)
 
-            nodeSizeIndex = int(self._window.nodeSizePopUp.get())
+            nodeSizeIndex = int(self._settings.nodeSizePopUp.get())
 
             if not evc or not hasattr(evc, 'graphicView') or not evc.graphicView():
                 self._magnifierView.updateInfo(
@@ -1206,6 +1241,7 @@ class MagnifierTool(SelectTool):
                 )
                 if self._window.getNSWindow().isVisible():
                     self._auto_hidden = True
+                    self.closeSettings()
                     self._window.hide()
                     self.stopTimer()
                 return
@@ -1218,6 +1254,7 @@ class MagnifierTool(SelectTool):
                 )
                 if self._window.getNSWindow().isVisible():
                     self._auto_hidden = True
+                    self.closeSettings()
                     self._window.hide()
                     self.stopTimer()
                 return
@@ -1250,7 +1287,7 @@ class MagnifierTool(SelectTool):
                 return
 
             zoom = float(self._window.slider.get())
-            is_linked = self._window.checkLink.get()
+            is_linked = self._settings.checkLink.get()
             if is_linked:
                 try:
                     evc_scale = evc.graphicView().scale()
@@ -1258,19 +1295,19 @@ class MagnifierTool(SelectTool):
                 except Exception:
                     pass
 
-            showFill = self._window.checkFill.get()
-            showNodes = self._window.checkNodes.get()
-            showGrid = self._window.checkGrid.get()
-            showStroke = self._window.checkStroke.get()
-            fillColor = self._window.colorWell.get()
+            showFill = self._settings.checkFill.get()
+            showNodes = self._settings.checkNodes.get()
+            showGrid = self._settings.checkGrid.get()
+            showStroke = self._settings.checkStroke.get()
+            fillColor = self._settings.colorWell.get()
 
-            bgShowFill = self._window.bgCheckFill.get()
-            bgShowStroke = self._window.bgCheckStroke.get()
-            bgFillColor = self._window.bgColorWell.get()
+            bgShowFill = self._settings.bgCheckFill.get()
+            bgShowStroke = self._settings.bgCheckStroke.get()
+            bgFillColor = self._settings.bgColorWell.get()
 
-            compShowFill = self._window.compCheckFill.get()
-            compShowStroke = self._window.compCheckStroke.get()
-            compFillColor = self._window.compColorWell.get()
+            compShowFill = self._settings.compCheckFill.get()
+            compShowStroke = self._settings.compCheckStroke.get()
+            compFillColor = self._settings.compColorWell.get()
 
             show_bg = Glyphs.defaults.get("showBackground", False)
             show_metrics = Glyphs.defaults.get("showMetrics", False)

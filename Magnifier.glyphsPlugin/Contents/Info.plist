@@ -11,7 +11,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Magnifier Tool</string>
+	<string>Magnifier</string>
 	<key>CFBundleShortVersionString</key>
 	<string>3.10.0</string>
 	<key>CFBundleVersion</key>
@@ -19,7 +19,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright, Yutaka Ozawa (mojipokke)</string>
 	<key>NSPrincipalClass</key>
-	<string>MagnifierTool</string>
+	<string>MagnifierPlugin</string>
 	<key>PyMainFileNames</key>
 	<array>
 		<string>plugin.py</string>
