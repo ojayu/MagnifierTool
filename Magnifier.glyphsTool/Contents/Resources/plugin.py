@@ -71,7 +71,7 @@ from vanilla import (
     FloatingWindow, Slider, EditText, CheckBox, TextBox, ColorWell, Button,
     PopUpButton
 )
-from AppKit import (
+from Cocoa import (
     NSView, NSColor, NSBezierPath, NSAffineTransform,
     NSGraphicsContext, NSMakeRect, NSMakePoint, NSBundle,
     NSViewWidthSizable, NSViewHeightSizable,
@@ -1014,6 +1014,8 @@ class MagnifierTool(SelectTool):
     def resetCallback(self, sender):
         if not hasattr(self, '_window'):
             return
+        if self._window is None:
+            return
         self._window.slider.set(4.0)
         self._window.zoomText.set("4.0")
         self._window.checkFill.set(True)
@@ -1054,6 +1056,8 @@ class MagnifierTool(SelectTool):
     @objc.python_method
     def uiCallback(self, sender):
         if not hasattr(self, '_window') or not hasattr(self, '_magnifierView'):
+            return
+        if self._window is None:
             return
         zoom = float(self._window.slider.get())
         if sender == self._window.slider:
