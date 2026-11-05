@@ -41,6 +41,12 @@ A tool plugin for [Glyphs](https://glyphsapp.com/) that shows a magnified view o
 
 Yutaka Ozawa ([mojipokke](https://www.mojipokke.jp/))
 
+### License
+
+Copyright 2026 Yutaka Ozawa (mojipokke)
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+
 ---
 
 ## 日本語
@@ -79,3 +85,9 @@ Yutaka Ozawa ([mojipokke](https://www.mojipokke.jp/))
 ### 作者
 
 Yutaka Ozawa ([mojipokke](https://www.mojipokke.jp/))
+
+### ライセンス
+
+Copyright 2026 Yutaka Ozawa (mojipokke)
+
+Apache License 2.0 で公開しています。詳しくは [LICENSE](LICENSE) をご覧ください。
