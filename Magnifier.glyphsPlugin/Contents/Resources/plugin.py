@@ -2,21 +2,21 @@
 # Author: Yutaka Ozawa (mojipokke)
 # Date: 2026-11-03 13:55:34 JST
 # Version: v3.10.0
-#MenuTitle: Magnifier Tool
+#MenuTitle: Magnifier
 
 from __future__ import division, print_function, unicode_literals
 
 __doc__ = """
-Magnifier Tool v3.10.0
+Magnifier v3.10.0
 
 概要:
-カーソル周辺を拡大表示するGlyphs用ツールプラグインです。
+カーソル周辺を拡大表示するGlyphs用プラグインです。
 NSTimerを用いた60fpsのリアルタイム同期と、永続ウィンドウ管理を実装しています。
 和文・欧文に連動するメトリクス表示、および背景レイヤーの独立した色/塗り/線設定に対応しています。
 ポイントサイズの変更や、ダークモード/ライトモードのアピアランス設定に完全対応しています。
 
 使い方:
-1. ツールバーからMagnifier Toolを選択し、ウィンドウを開きます。
+1. 「ウインドウ」メニューから「Magnifier」を選択し、ウィンドウを開きます。
 2. 他のツール（ペンツール等）に切り替えてもウィンドウは保持され、カーソル周辺をリアルタイムに拡大します。
 3. 前面・背景それぞれ独立して、カラーや塗り・線の表示を切り替えることができます。
    （指定したカラーは、ダークモード時に自動で視認性の高い明度に調整されます）
@@ -31,14 +31,14 @@ NSTimerを用いた60fpsのリアルタイム同期と、永続ウィンドウ�
     編集画面と同じ並びで拡大表示されます（ポイント等はアクティブなグリフのみ）。
 
 Overview:
-A tool plugin for Glyphs that shows a magnified view of the area around the cursor.
+A plugin for Glyphs that shows a magnified view of the area around the cursor.
 It provides real-time 60 fps updates driven by NSTimer and a persistent window.
 It displays metrics that adapt to CJK and Latin glyphs, and offers separate
 color / fill / stroke settings for the background layer.
 Node size can be changed, and Dark Mode / Light Mode appearance is fully supported.
 
 Usage:
-1. Select Magnifier Tool in the toolbar to open its window.
+1. Choose Window > Magnifier to open its window.
 2. The window stays open even when you switch to another tool (Pen tool, etc.)
    and keeps magnifying the area around the cursor in real time.
 3. Color, fill and stroke display can be set independently for the foreground
@@ -62,18 +62,17 @@ Usage:
     (nodes, anchors and metrics are shown for the active glyph only).
 """
 
-import os
-import traceback
 import objc
-from GlyphsApp import Glyphs, OFFCURVE
-from GlyphsApp.plugins import SelectTool
+from GlyphsApp import Glyphs, OFFCURVE, WINDOW_MENU
+from GlyphsApp.plugins import GeneralPlugin
+from GlyphsApp.UI import MenuItem
 from vanilla import (
     FloatingWindow, Slider, EditText, CheckBox, TextBox, ColorWell, Button,
     PopUpButton, Group
 )
 from Cocoa import (
     NSView, NSColor, NSBezierPath, NSAffineTransform,
-    NSGraphicsContext, NSMakeRect, NSMakePoint, NSBundle,
+    NSGraphicsContext, NSMakeRect, NSMakePoint,
     NSLayoutConstraint, NSViewController, NSPopover,
     NSPopoverBehaviorSemitransient, NSMaxYEdge,
     NSNotificationCenter, NSEvent, NSTimer, NSImage, NSImageOnly, NSApp,
@@ -573,11 +572,10 @@ class MagnifierView(NSView):
             pass
 
 
-class MagnifierTool(SelectTool):
+class MagnifierPlugin(GeneralPlugin):
     @objc.python_method
     def settings(self):
         self.name = 'Magnifier'
-        self.keyboardShortcut = None
         self._window = None
         self._settings = None
         self._settingsPopover = None
@@ -602,22 +600,10 @@ class MagnifierTool(SelectTool):
         self.pref_comp_color = "com.mojipokke.MagnifierTool.compFillColor"
         self.pref_appearance = "com.mojipokke.MagnifierTool.appearance"
 
-    def toolBarIcon(self):
-        icon_path = os.path.join(
-            os.path.dirname(__file__), "ToolbarIconTemplate.pdf"
-        )
-        if os.path.exists(icon_path):
-            image = NSImage.alloc().initWithContentsOfFile_(icon_path)
-            if image:
-                image.setTemplate_(True)
-                return image
-
-        bundle = NSBundle.bundleForClass_(self.__class__)
-        return bundle.imageForResource_("ToolbarIconTemplate")
-
     @objc.python_method
     def start(self):
-        pass
+        self._menuItem = MenuItem(self.name, action=self.showWindow_, target=self)
+        Glyphs.menu[WINDOW_MENU].append(self._menuItem)
 
     @objc.python_method
     def startTimer(self):
@@ -632,29 +618,11 @@ class MagnifierTool(SelectTool):
             self._timer.invalidate()
             self._timer = None
 
-    @objc.python_method
-    def activate(self):
+    def showWindow_(self, sender):
         self._auto_hidden = False
-        if self._window:
-            if not self._window.getNSWindow().isVisible():
-                def_frame = Glyphs.defaults.get(self.pref_frame)
-                if def_frame and isinstance(def_frame, str):
-                    self._window.getNSWindow().setFrameFromString_(def_frame)
-
-                self._window.show()
-
-                if def_frame and isinstance(def_frame, str):
-                    self._window.getNSWindow().setFrameFromString_(def_frame)
-
-            self.startTimer()
-            self.updateMagnifierView(force=True)
-        else:
-            self.openWindow()
-
-    @objc.python_method
-    def deactivate(self):
-        if self._window:
-            self.saveDefaults()
+        self.openWindow()
+        self._window.getNSWindow().makeKeyAndOrderFront_(self)
+        self.updateMagnifierView(force=True)
 
     def interfaceUpdated_(self, notification):
         self.updateMagnifierView(force=True)
@@ -755,7 +723,7 @@ class MagnifierTool(SelectTool):
         )
 
         self._window = FloatingWindow(
-            (100, 100, 280, 300), "Magnifier Tool", minSize=(220, 180)
+            (100, 100, 280, 300), self.name, minSize=(220, 180)
         )
         self._window.getNSWindow().setReleasedWhenClosed_(False)
 
@@ -1148,12 +1116,6 @@ class MagnifierTool(SelectTool):
             if hasattr(self, '_window'):
                 current_zoom = self._window.slider.get()
                 sender.set(f"{current_zoom:.1f}")
-
-    def mouseMoved_(self, event):
-        try:
-            self.updateMagnifierView(force=False)
-        except Exception:
-            pass
 
     @objc.python_method
     def _tabLayers(self, evc):
