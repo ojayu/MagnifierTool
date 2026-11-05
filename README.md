@@ -2,6 +2,8 @@
 
 [English](#english) | [日本語](#日本語)
 
+![Magnifier Tool](images/screenshot.png)
+
 ---
 
 ## English
