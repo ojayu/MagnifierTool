@@ -247,7 +247,7 @@ class MagnifierView(NSView):
             appearance_name = ""
             if hasattr(self, 'effectiveAppearance') and self.effectiveAppearance():
                 appearance_name = self.effectiveAppearance().name()
-            
+
             if 'Dark' in appearance_name:
                 rgb = color.colorUsingColorSpaceName_("NSCalibratedRGBColorSpace")
                 if rgb:
@@ -255,7 +255,7 @@ class MagnifierView(NSView):
                     s = rgb.saturationComponent()
                     b = rgb.brightnessComponent()
                     a = rgb.alphaComponent()
-                    
+
                     # ダークモード用に明度を反転し、彩度を少し抑える
                     new_b = max(b, 1.0 - b)
                     new_s = s * 0.8
@@ -299,7 +299,7 @@ class MagnifierView(NSView):
                 if show_bg and self.activeLayer.background:
                     context.saveGraphicsState()
                     bg_c = self.getAdaptiveColor_(self.bgFillColor)
-                    
+
                     if self.bgShowFill:
                         if bg_c:
                             bg_c.set()
@@ -470,7 +470,7 @@ class MagnifierView(NSView):
                         fg_c.colorWithAlphaComponent_(1.0).set()
                     else:
                         NSColor.textColor().set()
-                        
+
                     for path in self.activeLayer.paths:
                         bp = path.bezierPath
                         if bp:
@@ -507,7 +507,7 @@ class MagnifierView(NSView):
                     idx = getattr(self, 'nodeSizeIndex', 1)
                     if idx < 0 or idx > 2:
                         idx = 1
-                    
+
                     onCurveRadius = base_on[idx] / self.zoomLevel
                     offCurveRadius = base_off[idx] / self.zoomLevel
                     NSColor.lightGrayColor().set()
@@ -585,7 +585,7 @@ class MagnifierTool(SelectTool):
         self._lastMousePos = None
         self._timer = None
         self._auto_hidden = False
-        
+
         self.pref_zoom = "com.mojipokke.MagnifierTool.zoom"
         self.pref_fill = "com.mojipokke.MagnifierTool.showFill"
         self.pref_nodes = "com.mojipokke.MagnifierTool.showNodes"
@@ -698,7 +698,7 @@ class MagnifierTool(SelectTool):
             return
         nswindow = self._window.getNSWindow()
         idx = int(self._window.appearancePopUp.get())
-        
+
         target_appearance = None
         if idx == 0:  # OS連動
             target_appearance = None
@@ -716,7 +716,7 @@ class MagnifierTool(SelectTool):
             target_appearance = NSAppearance.appearanceNamed_(NSAppearanceNameAqua)
         elif idx == 3:  # ダーク
             target_appearance = NSAppearance.appearanceNamed_(NSAppearanceNameDarkAqua)
-            
+
         if nswindow.appearance() != target_appearance:
             nswindow.setAppearance_(target_appearance)
 
@@ -970,7 +970,7 @@ class MagnifierTool(SelectTool):
             Glyphs.defaults[self.pref_appearance] = int(self._window.appearancePopUp.get())
             Glyphs.defaults[self.pref_comp_fill] = bool(self._window.compCheckFill.get())
             Glyphs.defaults[self.pref_comp_stroke] = bool(self._window.compCheckStroke.get())
-            
+
             c = self._window.colorWell.get()
             if c:
                 c_rgb = c.colorUsingColorSpaceName_("NSCalibratedRGBColorSpace")
@@ -1042,7 +1042,7 @@ class MagnifierTool(SelectTool):
 
         self._window.setPosSize((100, 100, 280, 460))
         self._window.center()
-        
+
         doc = Glyphs.currentDocument
         evc = None
         if doc and doc.windowController():
